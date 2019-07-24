@@ -1,0 +1,64 @@
+import zombies._
+
+// Model inputs
+val humanPerception = Val[Double]
+val humanGlasses = Val[Int]
+val replication = Val[Long]
+
+// Model outputs
+val totalRescued = Val[Double]
+val rescuedDynamic = Val[Array[Int]]
+
+val model =
+  ScalaTask("""
+    import zombies._
+
+    val rng = new scala.util.Random(replication)
+
+    val result = zombieInvasion(
+      humanPerception = humanPerception,
+      zombies = 4,
+      humans = 250,
+      steps = 500,
+      random = rng
+    )
+
+    val peakTime = result.peakTimeZombified(window = 5).toDouble
+    val peakSize = result.peakSizeZombified(window = 5).toDouble
+    val humanGlasses = result.humanGlasses
+    val totalZombified = result.totalZombified.toDouble
+    val halfZombified = result.halfZombified.toDouble
+    val spatialMoranZombified = result.spatialMoranZombified
+    val spatialDistanceMeanZombified = result.spatialDistanceMeanZombified
+    val spatialEntropyZombified = result.spatialEntropyZombified
+    val spatialSlopeZombified = result.spatialSlopeZombified
+  """) set (
+    inputs += (humanGlasses,humanFollowProbability, humanInformedRatio, humanInformProbability,replication),
+    outputs += (peakTime,peakSize,totalZombified,halfZombified, spatialMoranZombified,spatialDistanceMeanZombified,spatialEntropyZombified,spatialSlopeZombified),
+    plugins += pluginsOf[zombies.agent.Agent]
+  )
+
+val purpose = "DIRECTSAMPLING_GRID_LOCALENV"
+
+val reshook = CSVHook(workDirectory / "exploration" / (((new java.text.SimpleDateFormat("yyyyMMdd_HHmmss")).format(new java.util.Date()))+"_"+purpose+".csv"))
+
+
+val explo = DirectSampling(
+  evaluation = (model hook reshook),
+  sampling = LHS(
+      100,
+      humanFollowProbability in (0.0,1.0),
+      humanInformedRatio in (0.0,1.0),
+      humanInformProbability in (0.0,1.0)
+    )
+    /*(humanFollowProbability in (0.0 to 1.0 by 0.5))
+    x (humanInformedRatio in (0.0 to 1.0 by 0.5))
+    x (humanInformProbability in (0.0 to 1.0 by 0.5))*/
+    x (replication in UniformDistribution[Long](100000) take 10)
+)
+
+
+explo
+
+
+

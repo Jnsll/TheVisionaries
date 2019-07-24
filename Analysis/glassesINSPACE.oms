@@ -1,0 +1,92 @@
+import _root_.zombies.simulation._
+import _root_.zombies.world._
+
+
+// Model inputs
+val replication = Val[Long]
+val civilianPerception = Val[Double]
+val percentCivilianGlassesWearers = Val[Double]
+val totalNumberCivilians = Val[Int]
+val myWorld = Val[Int]
+
+val totalNumberArmy = Val[Int]
+val armyPerception = Val[Double]
+
+val totalNumberRedCross = Val[Int]
+val redCrossPerception = Val[Double]
+
+// Model outputs
+//val rescuedDynamic = Val[Array[Int]]
+val totalZombified = Val[Int]
+//val totalRescued = Val[Int]
+//val rescuedDynamic = Val[Array[Double]]
+
+val model =
+  ScalaTask("""
+    import zombies._
+    import _root_.zombies.world._
+    
+    val rng = new scala.util.Random(replication)
+    
+    val glassesWearers = (percentCivilianGlassesWearers * totalNumberCivilians).toInt
+
+    val agents = (0 until glassesWearers).map(_ => Human(perception = civilianPerception))
+    
+    var simWorld = jaude//Val[_root_.zombies.world.World]    
+//    if (myWorld == 0) {simWorld = jaude}
+    if (myWorld == 1) {simWorld = quarantine}
+    if (myWorld == 2) {simWorld = stadium}
+       
+        
+    val result = zombieInvasion(
+      world = simWorld,
+      zombies = 4,
+      humans = totalNumberCivilians - glassesWearers,
+      army = Army(totalNumberArmy, perception = armyPerception),
+      redCross = RedCross(totalNumberRedCross, perception = redCrossPerception),
+      agents = agents,
+      humanInformedRatio = 0.06753217,
+      humanInformProbability = 0.1511996,
+      humanFollowProbability = 0.3898367,
+      random = rng
+    )
+
+    val totalZombified = result.totalZombified
+    //val rescuedDynamic = result.rescuedDynamic(20)
+    //val totalRescued = result.totalRescued
+  """) set (
+    inputs += (replication, civilianPerception, percentCivilianGlassesWearers, totalNumberCivilians,
+        totalNumberArmy, armyPerception, totalNumberRedCross, redCrossPerception, myWorld),
+    outputs += (civilianPerception, percentCivilianGlassesWearers, totalNumberCivilians,
+        totalNumberArmy, armyPerception, totalNumberRedCross, redCrossPerception, myWorld, totalZombified),
+    //seed := 123,
+    //percentCivilianGlassesWearers := 0.1,
+    totalNumberCivilians := 100,
+    totalNumberArmy := 10,
+    //armyPerception := 2.8,
+    totalNumberRedCross := 10,
+    //civilianPerception := 2.8,
+    //redCrossPerception := 2.8,
+    plugins += pluginsOf[zombies.agent.Agent]
+  )
+val env = SLURMEnvironment("xmodel01", "myria.criann.fr", queue = "2tcourt", wallTime = 20 minutes, nTasks = 1, memory = 2500, workDirectory = "/tmp", reservation = "exModelo0624")
+
+val purpose = "soboling"
+
+val reshook = CSVHook(workDirectory / "glasses_exploration_space" / (((new java.text.SimpleDateFormat("yyyyMMdd_HHmmss")).format(new java.util.Date()))+"_"+purpose+".csv"))
+
+val explo = DirectSampling(
+  evaluation = (model hook reshook),
+  sampling =
+    SobolSampling(
+        1000,
+      civilianPerception in (1.4, 4.5),
+      armyPerception in (1.4, 4.5),
+      redCrossPerception in (1.4, 4.5),
+      percentCivilianGlassesWearers in (0.0, 1.0)
+    ) x
+    (replication in UniformDistribution[Long](100000) take 10) x
+    (myWorld in (0 to 2 by 1))
+) 
+
+explo by 200 on env
